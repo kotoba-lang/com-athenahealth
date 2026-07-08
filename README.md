@@ -80,3 +80,69 @@ unchanged, same rationale as the sibling repos: they are paired with a
 specific built `wasmCid`, and hand-editing their `entities`/`routes` lists
 without rebuilding that WASM artifact would make the manifest less accurate,
 not more.
+
+## Maturity note (2026-07-08) -- EU: EHDS Article 3 (Regulation (EU) 2025/327), `PatientAccessRequest`
+
+Follow-up closing the item the pass above explicitly deferred. Adds a
+`PatientAccessRequest` entity modeling **Article 3 ("Right of natural
+persons to access their personal electronic health data"), paragraphs
+(1)-(3) only** -- the only EHDS text with a verified primary-source reading
+to hand (EUR-Lex blocks automated fetches with an AWS WAF JS challenge; the
+operative text was retrieved via a real-browser session on 2026-07-08 and
+is archived, with full retrieval-method provenance, at
+[`kotoba-lang/emr-claims-primary-sources`](https://github.com/kotoba-lang/emr-claims-primary-sources)'s
+`eu-ehds/ehds-article3-excerpt.md`, CELEX:32025R0327). **Article 14 (the
+priority-categories list) and Article 15 (the exchange-format schema) have
+not been retrieved from a primary source and are explicitly out of scope
+for this pass** -- inventing either would be exactly the kind of
+unverified-legal-content guess this codebase's working agreement forbids.
+
+Design and validator logic are ported *by value* (not a shared dependency)
+from `kotoba-lang/com-hl7-fhir`'s `PatientAccessRequest` entity
+(ADR-2607083200), with field names adapted to this actor's own vendor-style
+convention -- lowercase, `...yn` boolean-flag suffix (as `Consent`'s
+`specialcategorydatayn` already established) -- rather than the sibling
+repos' FHIR-style camelCase:
+
+- `patientid` (int, required) -- same convention as `Consent`/`Patient`.
+- `prioritycategoryyn` (boolean) -- whether the underlying record belongs to
+  the "priority categories" Article 3(1)/(2) refer to. **A bare flag, not an
+  enumerated category list**: the priority-categories list itself is
+  Article 14, not yet retrieved.
+- `accessmethod` (enum `"view"` / `"download"`, case-insensitive, required)
+  -- `"view"` is Art. 3(1) (immediate, free, easily-readable/consolidated
+  access once data is registered in an EHR system); `"download"` is
+  Art. 3(2) (a free electronic copy in the European electronic health
+  record exchange format, Article 15 -- named only as an external citation
+  here, not modeled as a data structure). Validated by
+  `athenahealth.validation/valid-ehds-access-method?`; anything else is
+  rejected with 400.
+- `restrictionappliedyn` (boolean) + `restrictionreason` (optional string)
+  -- Art. 3(3): a Member State may restrict/delay both rights "in
+  accordance with Article 23" of GDPR (Regulation (EU) 2016/679), e.g. for
+  patient-safety/ethical reasons. Enforced by a new **cross-field**
+  validator, `athenahealth.validation/valid-ehds-restriction?`, wired
+  through a new entity-spec key `:validate-record` (complementing the
+  existing single-field `:validate`, and newly plumbed into this actor's
+  `handle-create`/`handle-update` in this pass -- previously only
+  single-field `:validate` existed here): `restrictionappliedyn=true` with
+  a blank/absent `restrictionreason` is rejected with 400 on both create
+  and update (update checks the *merged* record, so patching only
+  `restrictionappliedyn` against an existing reason-less record is still
+  caught).
+
+See `src/athenahealth/validation.cljc` (`valid-ehds-access-method?` /
+`valid-ehds-restriction?`, with the scope caveats inline) and
+`test/athenahealth/main_test.cljc`'s `patient-access-request-domain-validation`
+deftest for pass/fail coverage (both access methods and case-insensitivity
+accepted, an out-of-set method rejected, a restriction without a reason
+rejected on both create and merged update, a restriction with a reason
+accepted). `bb test`: 8 deftests / 204 assertions as of this pass (up from
+7/169).
+
+**4-repo status**: this closes the gap noted above -- `com-hl7-fhir` /
+`com-epic-fhir` / `com-eclinicalworks` / `com-athenahealth` now all model
+the same three entities (`Claim`, `Consent`, `PatientAccessRequest`), each
+with vendor-appropriate field naming (FHIR camelCase for the first three,
+athenahealth's own lowercase/`...yn` convention here). `manifest.json` /
+`openapi.json` were intentionally left unchanged, same rationale as above.

@@ -128,6 +128,80 @@
       (is (= 400 status))
       (is (re-find #"lawfulbasisart9" (:message (:error body)))))))
 
+;; --- PatientAccessRequest: EU EHDS Art. 3 primary-use access rights -------
+;; Same rationale as npi-validation / consent-domain-validation above: the
+;; generic `validation` deftest only covers missing-required / unknown-field
+;; rejection, which every entity shares. PatientAccessRequest is the third
+;; entity with a real domain constraint, and the first with a *cross-field*
+;; one (:validate-record, not just :validate) -- restrictionappliedyn=true
+;; requires a non-blank restrictionreason (EHDS Art. 3(3), ported by value
+;; from kotoba-lang/com-hl7-fhir, ADR-2607083200).
+(def ^:private access-request-sample
+  (:sample (first (filter #(= "PatientAccessRequest" (:entity %)) m/entity-specs))))
+
+(deftest patient-access-request-domain-validation
+  (testing "a fully valid view request is accepted"
+    (let [s (m/fresh-store) [rec status] (m/handle-create s "PatientAccessRequest" access-request-sample)]
+      (is (= 201 status))
+      (is (str/starts-with? (:id rec) "athenahe_par_"))
+      (is (true? (:prioritycategoryyn rec)))
+      (is (false? (:restrictionappliedyn rec)))))
+  (testing "a download request is accepted"
+    (let [s (m/fresh-store)
+          [_ status] (m/handle-create s "PatientAccessRequest" (assoc access-request-sample :accessmethod "download"))]
+      (is (= 201 status))))
+  (testing "accessmethod is case-insensitive"
+    (let [s (m/fresh-store)
+          [_ status] (m/handle-create s "PatientAccessRequest" (assoc access-request-sample :accessmethod "VIEW"))]
+      (is (= 201 status))))
+  (testing "an accessmethod outside view/download is rejected"
+    (let [s (m/fresh-store)
+          [body status] (m/handle-create s "PatientAccessRequest" (assoc access-request-sample :accessmethod "print"))]
+      (is (= 400 status))
+      (is (re-find #"accessmethod" (:message (:error body))))))
+  (testing "restrictionappliedyn=true without restrictionreason is rejected"
+    (let [s (m/fresh-store)
+          [body status] (m/handle-create s "PatientAccessRequest"
+                                          (assoc access-request-sample :restrictionappliedyn true))]
+      (is (= 400 status))
+      (is (re-find #"restrictionreason" (:message (:error body))))))
+  (testing "restrictionappliedyn=true with a non-blank restrictionreason is accepted"
+    (let [s (m/fresh-store)
+          [rec status] (m/handle-create s "PatientAccessRequest"
+                                         (assoc access-request-sample
+                                                :restrictionappliedyn true
+                                                :restrictionreason "Art. 23 GDPR patient-safety delay"))]
+      (is (= 201 status))
+      (is (true? (:restrictionappliedyn rec)))))
+  (testing "prioritycategoryyn coerces truthy wire values to boolean"
+    (let [s (m/fresh-store)
+          [rec _] (m/handle-create s "PatientAccessRequest" (assoc access-request-sample :prioritycategoryyn "true"))]
+      (is (true? (:prioritycategoryyn rec)))))
+  (testing "update enforces the accessmethod format check on a present field"
+    (let [s (m/fresh-store)
+          [rec _] (m/handle-create s "PatientAccessRequest" access-request-sample)
+          [body status] (m/handle-update s "PatientAccessRequest" (:id rec) {:accessmethod "print"})]
+      (is (= 400 status))
+      (is (re-find #"accessmethod" (:message (:error body))))))
+  (testing "update enforces the restriction cross-field rule against the merged record"
+    (let [s (m/fresh-store)
+          [rec _] (m/handle-create s "PatientAccessRequest" access-request-sample)
+          ;; patch only restrictionappliedyn -- restrictionreason isn't in
+          ;; this patch, but the *merged* record (existing reason-less
+          ;; record + this patch) must still be checked, not just the raw
+          ;; patch.
+          [body status] (m/handle-update s "PatientAccessRequest" (:id rec) {:restrictionappliedyn true})]
+      (is (= 400 status))
+      (is (re-find #"restrictionreason" (:message (:error body))))))
+  (testing "update accepts restrictionappliedyn=true when the patch also supplies a reason"
+    (let [s (m/fresh-store)
+          [rec _] (m/handle-create s "PatientAccessRequest" access-request-sample)
+          [updated status] (m/handle-update s "PatientAccessRequest" (:id rec)
+                                             {:restrictionappliedyn true
+                                              :restrictionreason "Art. 23 GDPR patient-safety delay"})]
+      (is (= 200 status))
+      (is (true? (:restrictionappliedyn updated))))))
+
 (deftest healthz
   (let [[body status] (m/healthz)]
     (is (= 200 status)) (is (= "athenahealth-compat" (:actor body))) (is (= (set m/entities) (set (:entities body))))))

@@ -3,9 +3,11 @@
   entity-specs carry but do not yet check the shape of -- today the
   Provider `npi` field, which `athenahealth.main`'s `:coerce` map only
   type-converts (string/number -> int) without checking that the digits
-  form an actual NPI, and the Consent `lawfulbasisart9` field, which names
+  form an actual NPI, the Consent `lawfulbasisart9` field, which names
   one of the ten EU GDPR Art. 9(2) special-category-data lawful-basis
-  exceptions.
+  exceptions, and the PatientAccessRequest `accessmethod` /
+  `restrictionappliedyn` + `restrictionreason` fields, which model the EU
+  EHDS (Regulation (EU) 2025/327) Article 3 primary-use access rights.
 
   `valid-npi?` is a straight algorithmic port (not a runtime dependency)
   of `hl7-fhir.validation/valid-npi?` in kotoba-lang/com-hl7-fhir, which
@@ -28,7 +30,22 @@
   gdpr-info.eu on 2026-07-08. This checks only that a *code* naming one of
   the ten exceptions is well-formed, not that the cited exception is
   factually true for a given record -- same authority-vs-format caveat as
-  `valid-npi?` above."
+  `valid-npi?` above.
+
+  `ehds-access-methods` / `valid-ehds-access-method?` /
+  `valid-ehds-restriction?` are likewise ported by value from
+  `hl7-fhir.validation` (kotoba-lang/com-hl7-fhir, ADR-2607083200): EHDS
+  (Regulation (EU) 2025/327, European Health Data Space) Article 3
+  (\"Right of natural persons to access their personal electronic health
+  data\"), paragraphs (1)-(3) only -- the only EHDS text with a verified
+  primary-source reading to hand (EUR-Lex, CELEX:32025R0327, retrieved via
+  a real-browser session on 2026-07-08 and archived at
+  `kotoba-lang/emr-claims-primary-sources`'s
+  `eu-ehds/ehds-article3-excerpt.md`). Article 14 (the priority-categories
+  list) and Article 15 (the exchange-format schema) have not been
+  retrieved from a primary source, so -- same discipline as the sibling
+  repos -- this namespace does not enumerate priority categories or model
+  the exchange format's internal structure."
   (:require [clojure.string :as str]))
 
 (defn- digit-char? [c] (contains? #{\0 \1 \2 \3 \4 \5 \6 \7 \8 \9} c))
@@ -104,3 +121,55 @@
   doesn't guarantee."
   [s]
   (boolean (and (string? s) (contains? gdpr-art9-2-lawful-bases (str/lower-case s)))))
+
+;; --- EHDS Art. 3 primary-use access request (Regulation (EU) 2025/327) -----
+;;
+;; Ported by value from hl7-fhir.validation (kotoba-lang/com-hl7-fhir,
+;; ADR-2607083200) -- see that namespace's docstring for the full
+;; retrieval-provenance note (EUR-Lex blocks automated fetches; the operative
+;; Article 3(1)-(3) text was retrieved via a real-browser session on
+;; 2026-07-08 and archived at kotoba-lang/emr-claims-primary-sources's
+;; eu-ehds/ehds-article3-excerpt.md). Article 3 gives a natural person (1) a
+;; right to immediate, free, easily-readable *view* access to their
+;; priority-category electronic health data once it is registered in an EHR
+;; system, and (2) a right to *download* a free electronic copy of that same
+;; data in the European electronic health record exchange format. Article
+;; 3(3) lets a Member State restrict (delay) both rights, in accordance with
+;; Art. 23 GDPR, e.g. for patient-safety/ethical reasons.
+;;
+;; Field names here are this actor's own `patientaccessrequest` fields
+;; (`accessmethod` / `restrictionappliedyn` / `restrictionreason`), following
+;; the same lowercase/`...yn` convention `valid-gdpr-art9-lawful-basis?`'s
+;; caller (`Consent`) already established, not the FHIR-style camelCase
+;; (`accessMethod` / `restrictionApplied`) the sibling repos use.
+
+(def ehds-access-methods
+  "The two ways Article 3 lets a natural person exercise primary-use access
+  to their personal electronic health data: \"view\" (Art. 3(1) -- immediate,
+  free, easily-readable/consolidated access after EHR registration) and
+  \"download\" (Art. 3(2) -- free-of-charge electronic copy in the Article 15
+  exchange format). Article 3 defines no other access method."
+  #{"view" "download"})
+
+(defn valid-ehds-access-method?
+  "true if s (case-insensitive) is \"view\" or \"download\" -- the two
+  Article 3 primary-use access methods. Anything else (including the empty
+  string, nil, or a non-string) is rejected."
+  [s]
+  (boolean (and (string? s) (contains? ehds-access-methods (str/lower-case s)))))
+
+(defn valid-ehds-restriction?
+  "Cross-field check for Article 3(3): a Member-State restriction (a GDPR
+  Art. 23-aligned delay of Art. 3(1)/(2) access) must carry a reason -- an
+  undocumented restriction would silently withhold a patient's access right
+  with no audit trail of why it was withheld. Takes the whole record map
+  (not a single field value), unlike this namespace's other validators:
+  returns true (pass) when `:restrictionappliedyn` is falsy/absent, or when
+  it is truthy and `:restrictionreason` is a non-blank string; false
+  otherwise."
+  [data]
+  (let [applied (get data :restrictionappliedyn)
+        reason (get data :restrictionreason)]
+    (if applied
+      (boolean (and (string? reason) (not (str/blank? reason))))
+      true)))
