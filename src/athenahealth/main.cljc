@@ -12,7 +12,8 @@
   State lives on the kotoba Datom log: `emit-facts` produces namespaced EAVT
   facts (`athenahealth.<Entity>/<field>`); `*store*` is the in-memory materialization
   used by the contract test and by the WASM runtime before a live engine binds."
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [athenahealth.validation :as validation]))
 
 (def ns-prefix "athenahealth")
 (def tier "L5")
@@ -45,6 +46,7 @@
     :fields [:billable :ansispecialtycode :firstname :entitytype :otherprovideridlist :ansinamecode :displayname :homedepartment :providerid :providertypeid :providerusername :supervisingproviderid :providertype :createencounterprovideridlist :schedulingname :usualdepartmentid :createencounteroncheckinyn :specialty :hideinportalyn :lastname :npi :providergrouplist :federalidnumber :supervisingproviderusername]
     :required [:billable :ansispecialtycode]
     :coerce {:billable :bool :providerid :int :supervisingproviderid :int :createencounteroncheckinyn :bool :hideinportalyn :bool :npi :int}
+    :validate {:npi validation/valid-npi?}
     :refs {}}
    {:entity "Department" :plural "departments" :id-prefix "athenahe_dep"
     :fields [:timezoneoffset :singleappointmentcontractmax :state :placeofservicefacility :latitude :departmentid :address :placeofservicetypeid :longitude :clinicals :timezone :name :patientdepartmentname :chartsharinggroupid :placeofservicetypename :zip :timezonename :communicatorbrandid :medicationhistoryconsent :ishospitaldepartment :providergroupid :portalurl :city :servicedepartment]
@@ -127,6 +129,22 @@
       {:error {:message (str "Unknown fields: " (str/join ", " (map name extra)))
                :type "invalid_request_error"}})))
 
+(defn validate-fields
+  "Runs each `[field predicate]` pair in `validators` (an entity-spec's
+  `:validate` map, e.g. {:npi validation/valid-npi?}) against the
+  pre-coercion request `data`. A field absent or blank is not validated
+  here -- that is `require-fields`'s job -- so this only rejects a
+  *present* value that fails its format predicate."
+  [data validators]
+  (let [invalid (keep (fn [[field valid?]]
+                         (let [v (get data field)]
+                           (when (and (some? v) (not= v "") (not (valid? v)))
+                             field)))
+                       validators)]
+    (when (seq invalid)
+      {:error {:message (str "Invalid fields: " (str/join ", " (map name invalid)))
+               :type "invalid_request_error"}})))
+
 ;; --- list helpers ---
 (defn apply-filters [rows params fields]
   (reduce (fn [out f]
@@ -160,9 +178,10 @@
 (defn- not-found [] [{:error {:message "Not found" :type "not_found"}} 404])
 
 (defn handle-create [store entity data]
-  (let [{:keys [fields required coerce id-prefix]} (spec-for entity)]
+  (let [{:keys [fields required coerce id-prefix validate]} (spec-for entity)]
     (or (some-> (reject-unknown data fields) (vector 400))
         (some-> (require-fields data required) (vector 400))
+        (some-> (validate-fields data validate) (vector 400))
         (let [base {:id (new-id id-prefix)}
               rec (reduce (fn [m f] (assoc m f (coerce-field (get coerce f) (get data f)))) base fields)
               rec (assoc rec :createdAt (now) :updatedAt (now))]
@@ -180,10 +199,11 @@
     (if (empty? rows) (not-found) [(expand store (first rows) params refs) 200])))
 
 (defn handle-update [store entity id data]
-  (let [{:keys [fields]} (spec-for entity) rows (query store entity id)]
+  (let [{:keys [fields validate]} (spec-for entity) rows (query store entity id)]
     (if (empty? rows)
       (not-found)
       (or (some-> (reject-unknown data fields) (vector 400))
+          (some-> (validate-fields data validate) (vector 400))
           (let [rec (reduce-kv (fn [m k v] (if (#{:id :createdAt} k) m (assoc m k v)))
                                (first rows) data)
                 rec (assoc rec :updatedAt (now))]

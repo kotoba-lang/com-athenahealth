@@ -43,6 +43,44 @@
           (is (case kind :int (integer? (get rec f)) :float (float? (get rec f)) :bool (boolean? (get rec f)) true)
               (str entity "/" (name f))))))))
 
+(deftest npi-validation
+  (let [provider-spec (first (filter #(= "Provider" (:entity %)) m/entity-specs))
+        base (full-record provider-spec)]
+    (testing "create rejects an NPI with a wrong check digit"
+      (let [s (m/fresh-store)
+            [body status] (m/handle-create s "Provider" (assoc base :npi "1234567890"))]
+        (is (= 400 status))
+        (is (re-find #"npi" (:message (:error body))))))
+    (testing "create rejects an NPI with the wrong digit count"
+      (let [s (m/fresh-store)
+            [_ status] (m/handle-create s "Provider" (assoc base :npi "123456789"))]
+        (is (= 400 status))))
+    (testing "create rejects a non-numeric NPI"
+      (let [s (m/fresh-store)
+            [_ status] (m/handle-create s "Provider" (assoc base :npi "123456789A"))]
+        (is (= 400 status))))
+    (testing "create accepts the canonical structurally-valid NPI (string form)"
+      (let [s (m/fresh-store)
+            [rec status] (m/handle-create s "Provider" (assoc base :npi "1234567893"))]
+        (is (= 201 status))
+        (is (= 1234567893 (:npi rec)))))
+    (testing "create accepts the canonical structurally-valid NPI (numeric form)"
+      (let [s (m/fresh-store)
+            [rec status] (m/handle-create s "Provider" (assoc base :npi 1234567893))]
+        (is (= 201 status))
+        (is (= 1234567893 (:npi rec)))))
+    (testing "update rejects an invalid NPI and accepts a valid one"
+      (let [s (m/fresh-store)
+            [rec _] (m/handle-create s "Provider" base)
+            [_ bad-status] (m/handle-update s "Provider" (:id rec) {:npi "9999999999"})
+            [_ ok-status] (m/handle-update s "Provider" (:id rec) {:npi "1234567893"})]
+        (is (= 400 bad-status))
+        (is (= 200 ok-status))))
+    (testing "an absent or blank npi is left to require-fields/coercion, not rejected here"
+      (let [s (m/fresh-store)
+            [_ status] (m/handle-create s "Provider" base)]
+        (is (= 201 status))))))
+
 (deftest healthz
   (let [[body status] (m/healthz)]
     (is (= 200 status)) (is (= "athenahealth-compat" (:actor body))) (is (= (set m/entities) (set (:entities body))))))
