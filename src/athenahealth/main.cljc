@@ -11,7 +11,16 @@
 
   State lives on the kotoba Datom log: `emit-facts` produces namespaced EAVT
   facts (`athenahealth.<Entity>/<field>`); `*store*` is the in-memory materialization
-  used by the contract test and by the WASM runtime before a live engine binds."
+  used by the contract test and by the WASM runtime before a live engine binds.
+
+  `Provider` and `Consent` are the exceptions to \"resource shapes only\":
+  their `:validate` keys wire real domain format checks into the generic
+  create/update handlers -- `Provider` for the NPI check digit (45 CFR
+  162.410), `Consent` for the EU GDPR Art. 9(2) special-category-data
+  lawful-basis code (Regulation (EU) 2016/679) -- so a provider record with
+  a malformed NPI, or a consent record citing a lawful-basis code that
+  isn't one of the Regulation's ten, is rejected with 400 instead of
+  silently persisted."
   (:require [clojure.string :as str]
             [athenahealth.validation :as validation]))
 
@@ -52,6 +61,23 @@
     :fields [:timezoneoffset :singleappointmentcontractmax :state :placeofservicefacility :latitude :departmentid :address :placeofservicetypeid :longitude :clinicals :timezone :name :patientdepartmentname :chartsharinggroupid :placeofservicetypename :zip :timezonename :communicatorbrandid :medicationhistoryconsent :ishospitaldepartment :providergroupid :portalurl :city :servicedepartment]
     :required [:timezoneoffset :singleappointmentcontractmax]
     :coerce {:timezoneoffset :int :placeofservicefacility :bool :departmentid :int :timezone :int :medicationhistoryconsent :bool :ishospitaldepartment :bool :servicedepartment :bool}
+    :refs {}}
+   ;; EU GDPR Art. 9(2) special-category-data lawful-basis record (EHR-compat
+   ;; EU increment, following the same pass in kotoba-lang/com-hl7-fhir,
+   ;; ADR-2607083100). Every Patient/Encounter/Claim record this actor models
+   ;; carries "data concerning health" per GDPR Art. 9(1) (Regulation (EU)
+   ;; 2016/679), prohibited unless one of the ten Art. 9(2)(a)-(j) exceptions
+   ;; applies. `lawfulbasisart9` records, per patient, which exception is
+   ;; relied on -- naming/`yn`-suffix style matches this actor's existing
+   ;; fields (`patientid` as in the Patient entity, `specialcategorydatayn`
+   ;; matching the `...yn` boolean-flag convention used by e.g. `homeboundyn`
+   ;; / `donotcallyn`), not FHIR's camelCase.
+   {:entity "Consent" :plural "consents" :id-prefix "athenahe_cst"
+    :fields [:patientid :specialcategorydatayn :lawfulbasisart9 :status]
+    :required [:patientid :specialcategorydatayn :lawfulbasisart9]
+    :coerce {:patientid :int :specialcategorydatayn :bool}
+    :validate {:lawfulbasisart9 validation/valid-gdpr-art9-lawful-basis?}
+    :sample {:patientid 1 :specialcategorydatayn true :lawfulbasisart9 "h" :status "active"}
     :refs {}}])
 
 (def entities (mapv :entity entity-specs))

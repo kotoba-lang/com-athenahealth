@@ -8,7 +8,13 @@
             [athenahealth.main :as m]))
 
 (defn- dummy [field coerce] (case (get coerce field) :int 1 :float 1.0 :bool true (name field)))
-(defn- full-record [{:keys [required coerce]}] (into {} (map (fn [f] [f (dummy f coerce)]) required)))
+(defn- full-record
+  "A record satisfying an entity-spec's :required fields. Entities with
+  format `:validate`rs (e.g. Consent's GDPR Art. 9 lawful-basis check)
+  can't be satisfied by the generic field-name-as-value heuristic, so they
+  carry an explicit known-good `:sample` in the spec and this prefers it."
+  [{:keys [required coerce sample]}]
+  (or sample (into {} (map (fn [f] [f (dummy f coerce)]) required))))
 
 (deftest route-surface
   (is (= (* 5 (count m/entity-specs)) (count m/routes)))
@@ -80,6 +86,47 @@
       (let [s (m/fresh-store)
             [_ status] (m/handle-create s "Provider" base)]
         (is (= 201 status))))))
+
+;; --- Consent: EU GDPR Art. 9(2) lawful-basis validation --------------------
+;; Same rationale as npi-validation above: the generic `validation` deftest
+;; only covers missing-required / unknown-field rejection, which every
+;; entity shares. Consent is the second entity (after Provider) whose field
+;; carries a real domain-format constraint (one of the ten Art. 9(2)(a)-(j)
+;; point-letters), ported by value from kotoba-lang/com-hl7-fhir
+;; (ADR-2607083100).
+(def ^:private consent-sample
+  (:sample (first (filter #(= "Consent" (:entity %)) m/entity-specs))))
+
+(deftest consent-domain-validation
+  (testing "a fully valid consent record is accepted"
+    (let [s (m/fresh-store) [rec status] (m/handle-create s "Consent" consent-sample)]
+      (is (= 201 status))
+      (is (str/starts-with? (:id rec) "athenahe_cst_"))
+      (is (true? (:specialcategorydatayn rec)))))
+  (testing "each of the ten Art. 9(2) point-letters is independently accepted"
+    (doseq [code ["a" "b" "c" "d" "e" "f" "g" "h" "i" "j"]]
+      (let [s (m/fresh-store)
+            [_ status] (m/handle-create s "Consent" (assoc consent-sample :lawfulbasisart9 code))]
+        (is (= 201 status) code))))
+  (testing "a lawful-basis code outside the ten-item set is rejected"
+    (let [s (m/fresh-store)
+          [body status] (m/handle-create s "Consent" (assoc consent-sample :lawfulbasisart9 "z"))]
+      (is (= 400 status))
+      (is (re-find #"lawfulbasisart9" (:message (:error body))))))
+  (testing "the full exception label instead of the point-letter is rejected"
+    (let [s (m/fresh-store)
+          [_ status] (m/handle-create s "Consent" (assoc consent-sample :lawfulbasisart9 "explicit consent"))]
+      (is (= 400 status))))
+  (testing "specialcategorydatayn coerces truthy wire values to boolean"
+    (let [s (m/fresh-store)
+          [rec _] (m/handle-create s "Consent" (assoc consent-sample :specialcategorydatayn "true"))]
+      (is (true? (:specialcategorydatayn rec)))))
+  (testing "update also enforces format validation on a present field"
+    (let [s (m/fresh-store)
+          [rec _] (m/handle-create s "Consent" consent-sample)
+          [body status] (m/handle-update s "Consent" (:id rec) {:lawfulbasisart9 "zz"})]
+      (is (= 400 status))
+      (is (re-find #"lawfulbasisart9" (:message (:error body)))))))
 
 (deftest healthz
   (let [[body status] (m/healthz)]
