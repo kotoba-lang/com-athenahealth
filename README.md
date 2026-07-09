@@ -92,10 +92,11 @@ operative text was retrieved via a real-browser session on 2026-07-08 and
 is archived, with full retrieval-method provenance, at
 [`kotoba-lang/emr-claims-primary-sources`](https://github.com/kotoba-lang/emr-claims-primary-sources)'s
 `eu-ehds/ehds-article3-excerpt.md`, CELEX:32025R0327). **Article 14 (the
-priority-categories list) and Article 15 (the exchange-format schema) have
-not been retrieved from a primary source and are explicitly out of scope
-for this pass** -- inventing either would be exactly the kind of
+priority-categories list) and Article 15 (the exchange-format schema) had
+not been retrieved from a primary source and were explicitly out of scope
+for this pass** -- inventing either would have been exactly the kind of
 unverified-legal-content guess this codebase's working agreement forbids.
+Both have since been retrieved; see the 2026-07-09 maturity note below.
 
 Design and validator logic are ported *by value* (not a shared dependency)
 from `kotoba-lang/com-hl7-fhir`'s `PatientAccessRequest` entity
@@ -105,10 +106,10 @@ convention -- lowercase, `...yn` boolean-flag suffix (as `Consent`'s
 repos' FHIR-style camelCase:
 
 - `patientid` (int, required) -- same convention as `Consent`/`Patient`.
-- `prioritycategoryyn` (boolean) -- whether the underlying record belongs to
-  the "priority categories" Article 3(1)/(2) refer to. **A bare flag, not an
-  enumerated category list**: the priority-categories list itself is
-  Article 14, not yet retrieved.
+- `prioritycategory` (enum, one of 6 Article 14(1)(a)-(f) values, see the
+  2026-07-09 maturity note below -- was `prioritycategoryyn`, a bare boolean
+  flag, at the time this section was originally written, before Article 14
+  had been retrieved).
 - `accessmethod` (enum `"view"` / `"download"`, case-insensitive, required)
   -- `"view"` is Art. 3(1) (immediate, free, easily-readable/consolidated
   access once data is registered in an EHR system); `"download"` is
@@ -146,3 +147,39 @@ the same three entities (`Claim`, `Consent`, `PatientAccessRequest`), each
 with vendor-appropriate field naming (FHIR camelCase for the first three,
 athenahealth's own lowercase/`...yn` convention here). `manifest.json` /
 `openapi.json` were intentionally left unchanged, same rationale as above.
+
+## Maturity note (2026-07-09) -- EU: EHDS Article 14 priority categories (Regulation (EU) 2025/327)
+
+Follow-up closing the item the 2026-07-08 pass above explicitly deferred,
+same pass as `com-hl7-fhir` / `com-epic-fhir` / `com-eclinicalworks`.
+Article 14 ("Priority categories of personal electronic health data for
+primary use") and the referenced part of Article 15 were retrieved via the
+same real-browser EUR-Lex method and are archived at
+[`kotoba-lang/emr-claims-primary-sources`](https://github.com/kotoba-lang/emr-claims-primary-sources)'s
+`eu-ehds/ehds-article14-15-excerpt.md`.
+
+- `prioritycategoryyn` is renamed `prioritycategory` and is now a closed
+  6-value enum matching **Article 14(1)(a)-(f) verbatim**, glued lowercase
+  per this actor's own field-naming convention (matching `accessmethod`'s
+  `"view"`/`"download"` values, not the sibling repos' kebab-case):
+  `patientsummary`, `electronicprescription`, `electronicdispensation`,
+  `medicalimaging`, `medicaltestresults`, `dischargereport`. The `...yn`
+  suffix is dropped because it is this actor's boolean-flag convention,
+  which no longer fits a 6-value enum. Case-insensitive, validated by
+  `athenahealth.validation/valid-ehds-priority-category?`; not required
+  (unlike `accessmethod`), but any *present* value outside the six is
+  rejected with 400. Annex I's per-category "main characteristics" and
+  Article 14(1)'s allowance for Member States to add national categories are
+  both **not** modeled (out of scope for this pass).
+- **`accessmethod` / Article 15 stays a citation only.** Article 15 does
+  *not* itself define the concrete technical schema of the exchange format
+  -- it delegates that to future European Commission implementing acts, not
+  yet published -- so `accessmethod` continues to only name the format by
+  reference, with no exchange-format data structure added.
+
+See `src/athenahealth/validation.cljc` (`ehds-priority-categories` /
+`valid-ehds-priority-category?`) and
+`test/athenahealth/main_test.cljc`'s `patient-access-request-domain-validation`
+deftest for pass/fail coverage (all six categories and case-insensitivity
+accepted, an out-of-set value rejected on both create and update). `bb
+test`: 9 deftests / 358 assertions as of this pass (up from 8/204).

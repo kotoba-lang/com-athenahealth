@@ -176,7 +176,7 @@
     (let [s (m/fresh-store) [rec status] (m/handle-create s "PatientAccessRequest" access-request-sample)]
       (is (= 201 status))
       (is (str/starts-with? (:id rec) "athenahe_par_"))
-      (is (true? (:prioritycategoryyn rec)))
+      (is (= "patientsummary" (:prioritycategory rec)))
       (is (false? (:restrictionappliedyn rec)))))
   (testing "a download request is accepted"
     (let [s (m/fresh-store)
@@ -191,6 +191,12 @@
           [body status] (m/handle-create s "PatientAccessRequest" (assoc access-request-sample :accessmethod "print"))]
       (is (= 400 status))
       (is (re-find #"accessmethod" (:message (:error body))))))
+  (testing "each of the six Article 14(1) priority categories is independently accepted"
+    (doseq [category ["patientsummary" "electronicprescription" "electronicdispensation"
+                       "medicalimaging" "medicaltestresults" "dischargereport"]]
+      (let [s (m/fresh-store)
+            [_ status] (m/handle-create s "PatientAccessRequest" (assoc access-request-sample :prioritycategory category))]
+        (is (= 201 status) category))))
   (testing "restrictionappliedyn=true without restrictionreason is rejected"
     (let [s (m/fresh-store)
           [body status] (m/handle-create s "PatientAccessRequest"
@@ -205,10 +211,22 @@
                                                 :restrictionreason "Art. 23 GDPR patient-safety delay"))]
       (is (= 201 status))
       (is (true? (:restrictionappliedyn rec)))))
-  (testing "prioritycategoryyn coerces truthy wire values to boolean"
+  (testing "prioritycategory is case-insensitive"
     (let [s (m/fresh-store)
-          [rec _] (m/handle-create s "PatientAccessRequest" (assoc access-request-sample :prioritycategoryyn "true"))]
-      (is (true? (:prioritycategoryyn rec)))))
+          [rec status] (m/handle-create s "PatientAccessRequest" (assoc access-request-sample :prioritycategory "DISCHARGEREPORT"))]
+      (is (= 201 status))
+      (is (= "DISCHARGEREPORT" (:prioritycategory rec)))))
+  (testing "a prioritycategory outside the Article 14(1) six-value enum is rejected"
+    (let [s (m/fresh-store)
+          [body status] (m/handle-create s "PatientAccessRequest" (assoc access-request-sample :prioritycategory "vitalsigns"))]
+      (is (= 400 status))
+      (is (re-find #"prioritycategory" (:message (:error body))))))
+  (testing "update enforces the prioritycategory format check on a present field"
+    (let [s (m/fresh-store)
+          [rec _] (m/handle-create s "PatientAccessRequest" access-request-sample)
+          [body status] (m/handle-update s "PatientAccessRequest" (:id rec) {:prioritycategory "vitalsigns"})]
+      (is (= 400 status))
+      (is (re-find #"prioritycategory" (:message (:error body))))))
   (testing "update enforces the accessmethod format check on a present field"
     (let [s (m/fresh-store)
           [rec _] (m/handle-create s "PatientAccessRequest" access-request-sample)

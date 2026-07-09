@@ -37,15 +37,18 @@
   `hl7-fhir.validation` (kotoba-lang/com-hl7-fhir, ADR-2607083200): EHDS
   (Regulation (EU) 2025/327, European Health Data Space) Article 3
   (\"Right of natural persons to access their personal electronic health
-  data\"), paragraphs (1)-(3) only -- the only EHDS text with a verified
-  primary-source reading to hand (EUR-Lex, CELEX:32025R0327, retrieved via
-  a real-browser session on 2026-07-08 and archived at
-  `kotoba-lang/emr-claims-primary-sources`'s
-  `eu-ehds/ehds-article3-excerpt.md`). Article 14 (the priority-categories
-  list) and Article 15 (the exchange-format schema) have not been
-  retrieved from a primary source, so -- same discipline as the sibling
-  repos -- this namespace does not enumerate priority categories or model
-  the exchange format's internal structure."
+  data\"), paragraphs (1)-(3) only, and Article 14(1) (\"Priority categories
+  of personal electronic health data for primary use\") -- both retrieved
+  from a primary source (EUR-Lex, CELEX:32025R0327, via real-browser
+  sessions on 2026-07-08 and 2026-07-09 respectively, archived at
+  `kotoba-lang/emr-claims-primary-sources`'s `eu-ehds/ehds-article3-excerpt.md`
+  and `eu-ehds/ehds-article14-15-excerpt.md`). `ehds-priority-categories` /
+  `valid-ehds-priority-category?` enumerate Article 14(1)'s six priority
+  categories. Article 15 (the exchange-format schema) was also retrieved but
+  does not itself define a concrete technical schema -- it delegates that to
+  future European Commission implementing acts -- so, same discipline as the
+  sibling repos, this namespace does not model the exchange format's
+  internal structure."
   (:require [clojure.string :as str]))
 
 (defn- digit-char? [c] (contains? #{\0 \1 \2 \3 \4 \5 \6 \7 \8 \9} c))
@@ -157,6 +160,42 @@
   string, nil, or a non-string) is rejected."
   [s]
   (boolean (and (string? s) (contains? ehds-access-methods (str/lower-case s)))))
+
+;; --- EHDS Art. 14(1) priority categories (Regulation (EU) 2025/327) --------
+;;
+;; Ported by value from `hl7-fhir.validation` (kotoba-lang/com-hl7-fhir),
+;; where Article 14's verbatim text was retrieved via a real-browser EUR-Lex
+;; session on 2026-07-09 (same WAF-workaround method as Article 3) and is
+;; archived at
+;; orgs/kotoba-lang/emr-claims-primary-sources/eu-ehds/ehds-article14-15-excerpt.md.
+;; Article 14(1) lists exactly six priority categories, (a)-(f); Annex I's
+;; per-category "main characteristics" were not retrieved and are not
+;; modeled here. Article 14(1) also lets a Member State add national
+;; categories on top of these six via its own national law -- that
+;; per-Member-State extension is explicitly out of scope for this pass.
+;; Values are glued lowercase (this actor's own field-naming convention,
+;; matching `ehds-access-methods`' `"view"`/`"download"`), not the sibling
+;; repos' kebab-case.
+
+(def ehds-priority-categories
+  "The six Article 14(1)(a)-(f) priority categories of personal electronic
+  health data for primary use, glued-lowercased from the Regulation's own
+  wording: \"patientsummary\" (a), \"electronicprescription\" (b),
+  \"electronicdispensation\" (c), \"medicalimaging\" (d, \"medical imaging
+  studies and related imaging reports\"), \"medicaltestresults\" (e,
+  \"medical test results, including laboratory and other diagnostic results
+  and related reports\"), \"dischargereport\" (f)."
+  #{"patientsummary" "electronicprescription" "electronicdispensation"
+    "medicalimaging" "medicaltestresults" "dischargereport"})
+
+(defn valid-ehds-priority-category?
+  "true if s (case-insensitive) is one of the six Article 14(1) priority
+  categories. Anything else (including the empty string, nil, or a
+  non-string) is rejected -- this deliberately does not accept a
+  Member-State-added national category (Article 14(1) final paragraph),
+  which is out of scope for this pass."
+  [s]
+  (boolean (and (string? s) (contains? ehds-priority-categories (str/lower-case s)))))
 
 (defn valid-ehds-restriction?
   "Cross-field check for Article 3(3): a Member-State restriction (a GDPR
