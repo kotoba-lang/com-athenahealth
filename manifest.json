@@ -10,7 +10,7 @@
   "runtime": "kotoba-wasm",
   "exec": "browser-local|donated-mesh",
   "ipfs": "ipfs://bafkreidyhu3tq3twxzlznejvx6wgm6z772deyzzqt2lfwnrdhbk45sy2xa",
-  "schema": "schema/athenahealth.kotoba-schema",
+  "schema": "schema/athenahealth.kotoba",
   "tier": "L5",
   "verified": {
     "source": "https://docs.athenahealth.com/api",
