@@ -49,7 +49,7 @@
   future European Commission implementing acts -- so, same discipline as the
   sibling repos, this namespace does not model the exchange format's
   internal structure."
-  (:require [clojure.string :as str]))
+  (:require [kotoba.lang.text :as str]))
 
 (defn- digit-char? [c] (contains? #{\0 \1 \2 \3 \4 \5 \6 \7 \8 \9} c))
 
@@ -123,7 +123,7 @@
   checked -- see the namespace-level caveat above about what this does and
   doesn't guarantee."
   [s]
-  (boolean (and (string? s) (contains? gdpr-art9-2-lawful-bases (str/lower-case s)))))
+  (boolean (and (string? s) (contains? gdpr-art9-2-lawful-bases (str/lower s)))))
 
 ;; --- EHDS Art. 3 primary-use access request (Regulation (EU) 2025/327) -----
 ;;
@@ -159,7 +159,7 @@
   Article 3 primary-use access methods. Anything else (including the empty
   string, nil, or a non-string) is rejected."
   [s]
-  (boolean (and (string? s) (contains? ehds-access-methods (str/lower-case s)))))
+  (boolean (and (string? s) (contains? ehds-access-methods (str/lower s)))))
 
 ;; --- EHDS Art. 14(1) priority categories (Regulation (EU) 2025/327) --------
 ;;
@@ -195,7 +195,7 @@
   Member-State-added national category (Article 14(1) final paragraph),
   which is out of scope for this pass."
   [s]
-  (boolean (and (string? s) (contains? ehds-priority-categories (str/lower-case s)))))
+  (boolean (and (string? s) (contains? ehds-priority-categories (str/lower s)))))
 
 (defn valid-ehds-restriction?
   "Cross-field check for Article 3(3): a Member-State restriction (a GDPR
