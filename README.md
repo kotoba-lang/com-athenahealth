@@ -60,7 +60,7 @@ See `src/athenahealth/validation.cljk` (`gdpr-art9-2-lawful-bases` /
 `consent-domain-validation` deftest for pass/fail coverage (all ten
 point-letters accepted, an out-of-set code and the full exception label both
 rejected, boolean coercion, and that `handle-update` enforces the same
-check). `bb test`: 7 deftests / 169 assertions as of this pass.
+check). `kbb -M:test`: 7 deftests / 169 assertions as of this pass.
 
 **Not done in this pass** (left for a follow-up increment, one topic at a
 time): **`PatientAccessRequest`** (EU EHDS, Regulation (EU) 2025/327 Article
@@ -138,7 +138,7 @@ See `src/athenahealth/validation.cljk` (`valid-ehds-access-method?` /
 deftest for pass/fail coverage (both access methods and case-insensitivity
 accepted, an out-of-set method rejected, a restriction without a reason
 rejected on both create and merged update, a restriction with a reason
-accepted). `bb test`: 8 deftests / 204 assertions as of this pass (up from
+accepted). `kbb -M:test`: 8 deftests / 204 assertions as of this pass (up from
 7/169).
 
 **4-repo status**: this closes the gap noted above -- `com-hl7-fhir` /
