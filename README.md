@@ -55,8 +55,8 @@ label for each point, and the validator/entity design are ported *by value*
 (not a shared dependency -- each actor stays a standalone deploy unit) from
 `kotoba-lang/com-hl7-fhir`'s `Consent` entity (ADR-2607083100), which checked
 the text against EUR-Lex (CELEX:32016R0679) and gdpr-info.eu on 2026-07-08.
-See `src/athenahealth/validation.cljc` (`gdpr-art9-2-lawful-bases` /
-`valid-gdpr-art9-lawful-basis?`) and `test/athenahealth/main_test.cljc`'s
+See `src/athenahealth/validation.cljk` (`gdpr-art9-2-lawful-bases` /
+`valid-gdpr-art9-lawful-basis?`) and `test/athenahealth/main_test.cljk`'s
 `consent-domain-validation` deftest for pass/fail coverage (all ten
 point-letters accepted, an out-of-set code and the full exception label both
 rejected, boolean coercion, and that `handle-update` enforces the same
@@ -132,9 +132,9 @@ repos' FHIR-style camelCase:
   `restrictionappliedyn` against an existing reason-less record is still
   caught).
 
-See `src/athenahealth/validation.cljc` (`valid-ehds-access-method?` /
+See `src/athenahealth/validation.cljk` (`valid-ehds-access-method?` /
 `valid-ehds-restriction?`, with the scope caveats inline) and
-`test/athenahealth/main_test.cljc`'s `patient-access-request-domain-validation`
+`test/athenahealth/main_test.cljk`'s `patient-access-request-domain-validation`
 deftest for pass/fail coverage (both access methods and case-insensitivity
 accepted, an out-of-set method rejected, a restriction without a reason
 rejected on both create and merged update, a restriction with a reason
@@ -177,9 +177,9 @@ same real-browser EUR-Lex method and are archived at
   yet published -- so `accessmethod` continues to only name the format by
   reference, with no exchange-format data structure added.
 
-See `src/athenahealth/validation.cljc` (`ehds-priority-categories` /
+See `src/athenahealth/validation.cljk` (`ehds-priority-categories` /
 `valid-ehds-priority-category?`) and
-`test/athenahealth/main_test.cljc`'s `patient-access-request-domain-validation`
+`test/athenahealth/main_test.cljk`'s `patient-access-request-domain-validation`
 deftest for pass/fail coverage (all six categories and case-insensitivity
 accepted, an out-of-set value rejected on both create and update). `bb
 test`: 9 deftests / 358 assertions as of this pass (up from 8/204).
